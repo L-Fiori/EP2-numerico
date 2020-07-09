@@ -1,0 +1,340 @@
+# MAP3121 - Métodos Numéricos e Aplicações - Turma 04
+# Exercicio Programa 2
+
+# Autores: Felipe Augusto Martins Pascutti - nUSP: 10705551
+#          Lucas Fiori Rodrigues Amorim de Oliveira - nUSP: 10770408
+
+import time
+import datetime
+import math
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import BoundaryNorm
+from matplotlib.ticker import MaxNLocator
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import random
+
+#=============================================== TAREFA A ===============================================
+
+def f_4(t, x):
+	return 10*(1+np.cos(5*t))
+
+def function_matrix_2(tv, xv, func, N, ponto):
+    '''
+    Basicamente a mesma função acima, utilizada na segunda tarefa (a dupla desenvolveu as tarefas paralelamente).
+    '''
+    t, x = np.meshgrid(tv, xv)
+
+    if func == 0:
+        gh = np.zeros((N+1,N+1))
+        for i in range (x.shape[0]):
+            if x[i][0] <= (ponto + 1/(2*N) + 0.0000001) and x[i][0] >= (ponto - 1/(2*N) - 0.0000001):
+                gh[i, :] = N
+        f = f_4(t, x)
+        f = f * gh
+        return f
+
+def criaA(lamb, N):
+    """
+    Funçaõ que cria a matriz A para os diferentes metodos
+    """
+    A = np.zeros((N - 1, N - 1))
+    lamb = lamb / 2
+    for i in range(N - 1):
+        if i > 0:
+            A[i][i - 1] = -lamb
+            A[i - 1][i] = -lamb
+        A[i][i] = 1 + 2 * lamb
+    return A
+
+def multiplicadora(A):
+    """
+    Função que recebe a matriz A e retorna a matriz a ser multiplicada por B (de um sistema linear A*x=B),
+    isto é x = ((L^t)^-1)*(D^-1)*(L^-1)*B. Uma vez que a decomposição é A=LDL^t.
+    """
+    # cria os vetores Sub e Diag que representam as diagonais de A
+    Sub, Diag = [], []
+    tamanho = len(A)
+    for i in range(tamanho):
+        if i > 0:
+            Sub.append(A[i][i - 1])
+        Diag.append(A[i][i])
+
+    # cria os vetores Sub e Diag que representam as matrizes D e L
+    Diagori = Diag[:]  # Cria uma cópia dos vetores
+    Subori = Sub[:]  # da diagonal e da subdiagonal
+    for i in range(0, len(Diag)):  # calcula os valores dos vetores D e L usados na decomposição
+        if i == 0:
+            Diag[i] = Diagori[i]
+            Sub[i] = Subori[i] / Diag[i]
+        elif i < len(Diag) - 1:
+            Diag[i] = Diagori[i] - Diag[i - 1] * (Sub[i - 1] ** 2)
+            Sub[i] = Subori[i] / Diag[i]
+        else:
+            Diag[i] = Diagori[i] - Diag[i - 1] * (Sub[i - 1] ** 2)
+
+    # calcula a matriz a ser multiplicada por B
+    matrixL = np.identity((tamanho), dtype=np.float64)
+    matrixD = np.identity((tamanho), dtype=np.float64)
+    for i in range(tamanho):
+        if i > 0:  #
+            matrixL[i][i - 1] = Sub[i - 1]
+        matrixD[i][i] = Diag[i]
+    Ltrans = np.transpose(matrixL)  # calculado da matriz a ser multiplicada por B
+    Ltransinv = np.linalg.inv(Ltrans)
+    Linv = np.linalg.inv(matrixL)
+    Dinv = np.linalg.inv(matrixD)
+    mult1 = np.dot(Ltransinv, Dinv)
+    mult2 = np.dot(mult1, Linv)
+    multiplica = mult2
+    return multiplica
+
+def resolve_sistema(multiplica, B):
+    """
+    Função que recebe a matriz B, e a matriz que multiplica B e retorna o produto das duas
+    """
+    sol = np.dot(multiplica, B)
+    return sol
+
+def sistema_linear(A, B, N, lamb, f, func):
+    U = np.zeros((N + 1, N + 1))
+
+    mult = multiplicadora(A)
+    
+    for k in range(N):
+        for i in range(len(B)):
+            B[i] = (1 - lamb) * U[i + 1, k] + (f[i + 1, k] + f[i + 1, k + 1]) / (2 * N) + (lamb / 2) * (
+                        U[i, k] + U[i + 2, k])
+        resp = resolve_sistema(mult, B)
+        U[1:-1, k + 1] = resp
+
+    return U
+
+def plota(resp, u_exata, N, t, x, elapsed_time, metodo, func):
+    # plotagem (segunda tarefa)
+    if metodo == 0:
+        met = "Método: Euler implícito"
+    if metodo == 1:
+        met = "Método: Crank-Nicolson"
+    if func !=0:
+        levels1 = MaxNLocator(nbins=N).tick_values(resp.min(), resp.max())
+        cmap = plt.get_cmap('jet')
+        fig, (ax0, ax1) = plt.subplots(nrows=2)
+        t_1, x_1 = np.meshgrid(t, x)
+        cf1 = ax0.contourf(t_1,
+                       x_1,
+                       resp,
+                       levels=levels1,
+                       cmap=cmap)
+        fig.colorbar(cf1, ax=ax0)
+        ax1.set_xlabel('Instante de tempo', fontsize=12)
+        ax0.set_xlabel('Instante de tempo', fontsize=12)
+        ax1.set_ylabel('Posição na barra', fontsize=12)
+        ax0.set_ylabel('Posição na barra', fontsize=12)
+        ax0.set_title(
+        'Evolução da distribuição da temperatura na barra\n T=1, N={}, λ = {}, Tempo de execução: {:.5f} segundos - {}'.format(
+            N, N, elapsed_time, met), fontsize=10)
+
+        levels2 = MaxNLocator(nbins=N).tick_values(u_exata.min(), u_exata.max())
+
+        cf2 = ax1.contourf(t_1,
+                       x_1,
+                       u_exata,
+                       levels=levels2,
+                       cmap=cmap)
+
+        fig.colorbar(cf2, ax=ax1)
+        ax1.set_title('Solução exata')
+
+        fig2, ax2 = plt.subplots(nrows=1)
+
+        barra_final = resp[:, -1]
+        barra_final_exata = u_exata[:, -1]
+
+        ax2.plot(x, barra_final_exata, 'k', lw=4, label='Solução exata')
+        ax2.plot(x, barra_final, 'r', ls='--', lw=3, label='Solução numérica')
+        ax2.grid()
+        ax2.set_xlabel('Posição na barra', fontsize=12)
+        ax2.set_ylabel('Temperatura', fontsize=12)
+        ax2.set_title('Comparação entre solução numérica e solução exata\nEm T=1 N={}, λ = {}:\n{}'.format(N, N, met),
+                  fontsize=10)
+        ax2.legend()
+
+        fig3, ax3 = plt.subplots(nrows=1)
+        erro = barra_final_exata - barra_final
+        ax3.plot(x, erro, 'k', lw=4, label="Diferença entre solução exata e solução numérica")
+        ax3.grid()
+        ax3.set_xlabel('Posição na barra', fontsize=12)
+        ax3.set_ylabel('Erro', fontsize=12)
+        ax3.set_title(
+        ' Erro da temperatura em função da posição da barra\nEm T=1, N={}, λ = {} :\n{}'.format(N, N, met),
+        fontsize=10)
+        ax3.legend()
+
+        fig.tight_layout()
+
+        plt.show()
+    if func == 0:
+        levels1 = MaxNLocator(nbins=N).tick_values(resp.min(), resp.max())
+        cmap = plt.get_cmap('jet')
+        fig, (ax0) = plt.subplots(nrows=1)
+        t_1, x_1 = np.meshgrid(t, x)
+        cf1 = ax0.contourf(t_1,
+                           x_1,
+                           resp,
+                           levels=levels1,
+                           cmap=cmap)
+        fig.colorbar(cf1, ax=ax0)
+        ax0.set_xlabel('Instante de tempo', fontsize=12)
+        ax0.set_ylabel('Posição na barra', fontsize=12)
+        ax0.set_title(
+            'Evolução da distribuição da temperatura na barra\n T=1, N={}, λ = {}, Tempo de execução: {:.5f} segundos - {}'.format(
+                N, N, elapsed_time, met), fontsize=10)
+        fig.tight_layout()
+
+        plt.show()
+
+def segunda_parte(N, func, ponto):
+    tempoini = time.time()
+    dt, dx = 1/N, 1/N
+    lamb = dt / dx ** 2
+    x = np.arange(N + 1) * dx  # Cria o array de pontos da barra.
+    t = np.arange(N + 1) * dt  # Cria o array de tempo.
+    if func == 0:
+    	f = function_matrix_2(t, x, 0, N, ponto)
+
+    A = criaA(lamb, N)
+    B = [0] * (N - 1)
+    resp = sistema_linear(A, B, N, lamb, f, func)
+    tempo = time.time() - tempoini
+    #plota(resp, 0, N, t, x, tempo, 1, func)
+
+    return resp
+
+def tarefa_A(N, func, nf, caso):
+	uk = np.zeros((nf, N+1))
+	T = 1
+
+	if caso == 1:
+		ponto = [0.35]
+	elif caso == 2:
+		ponto = [0.15, 0.3, 0.7, 0.8]
+
+	for i in range(nf):
+		u = segunda_parte(N, func, ponto[i])
+		ui_ = u[:, N]
+		ui = np.transpose(ui_)
+
+		uk[i, :] = ui
+
+	if caso == 1:
+	    u_T = ui*7
+	elif caso == 2:
+		u_T = 2.3*uk[0, :] + 3.7*uk[1, :] + 0.3*uk[2, :] + 4.2*uk[3, :]
+
+	print(uk)
+	print(ui)
+
+	return uk, u_T
+
+#=============================================== TAREFA B ===============================================
+
+def sistema_normal(uk, u_T):
+
+	k = uk.shape[0]
+
+	mpi = np.zeros((k, k)) #cria a matriz de produtos internos inicialmente contendo zeros.
+	msol = np.zeros(k) #cria o vetor de produtos internos da solução inicialmente contendo zeros.
+
+	for i in range(k):
+		msol[i] = np.dot(u_T, uk[i, :])
+		for j in range(k):
+			mpi[i, j] = np.dot(uk[i,:], uk[j,:])
+
+	return mpi, msol
+
+#=============================================== TAREFA C ===============================================
+
+def LDL(A):
+	apoio = 0
+	n = A.shape[0]
+	v = np.zeros(n)
+	l = np.zeros((n, n))
+	d = np.zeros(n)
+	for i in range(n):
+		apoio = 0
+		for j in range(0, i):
+			v[j] = l[i, j]*d[j]
+			apoio += l[i, j]*v[j]
+		d[i] = A[i, i] - apoio
+		for j in range(i+1, n):
+			l[j, i] = (A[j, i] - apoio)/d[i]
+	return l, d
+
+def resolve_LDL(l, d, b):
+	apoio = 0
+	n = b.shape[0]
+	y = np.zeros(n)
+	x = np.zeros(n)
+	z = np.zeros(n)
+	y[0] = b[0]
+
+	#resolvendo Ly = b
+	for i in range(1, n):
+		apoio = 0
+		for j in range(0, i-1):
+			apoio += l[i, j] * y[j]
+		y[i] = b[i] - apoio
+
+	#resolvendo Dz = y
+	for i in range(n):
+		z[i] = y[i]/d[i]
+
+	#resolvendo (L^t)*x = z
+	x[n-1] = z[n-1]
+	for i in range(0, n-1, -1):
+		apoio = 0
+		for j in range(i+1, n):
+			apoio += l[j, i]*x[j]
+		x[i] = z[i] - apoio
+
+	return x
+
+#=============================================== ERRO QUADRATICO ===============================================
+
+
+
+#=============================================== MAIN ===============================================
+
+def main():
+
+	caso = int(input("Qual dos casos deseja rodar? ")) #LEIAME.txt
+
+	if caso == 1:
+		uk, u_T = tarefa_A(128, 0, 1, 1)
+		mpi, msol = sistema_normal(uk, u_T)
+		l, d = LDL(mpi)
+		x = resolve_LDL(l, d, msol)
+
+		print(x[0])
+
+	elif caso == 2:
+		uk, u_T = tarefa_A(128, 0, 4, 2)
+		mpi, msol = sistema_normal(uk, u_T)
+		l, d = LDL(mpi)
+		x = resolve_LDL(l, d, msol)
+
+		print(x)
+		
+	elif caso == 3:
+		pass
+
+	elif caso == 4:
+		pass
+
+
+
+
+
+main()
